@@ -12,7 +12,7 @@ else
 end
 
 class Workreport
-  attr_reader :config, :user, :year, :week
+  attr_reader :user, :year, :week
 
   @@debug = false
 
