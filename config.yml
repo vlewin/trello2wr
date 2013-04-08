@@ -1,0 +1,7 @@
+# Config file for trello2wr
+default:
+  trello_developer_public_key: ''
+  trello_member_token: ''
+  trello_username: ''
+  sender: ''
+  recipient: ''
