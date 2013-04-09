@@ -1,0 +1,11 @@
+# Config file for trello2wr
+trello:
+  developer_public_key: '<DEVELOPER_PUBLIC_KEY> https://trello.com/1/appKey/generate'
+  member_token: '<MEMBER TOKEN>https://trello.com/1/connect?key=<DEVELOPER_PUBLIC_KEY>&name=trello2wr.rb&response_type=token'
+  username: '<TRELLO USERNAME>'
+
+email:
+  client: '<thunderbird | evolution | geary>'
+  sender: '<email>'
+  recipient: '<email>'
+  cc: '<email>'

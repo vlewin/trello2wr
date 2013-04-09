@@ -1,18 +1,14 @@
-
-require 'rubygems'
 require 'trello'
 require 'yaml'
 require 'uri'
 
-# require 'ruby-debug'
-
-if File.exist? File.expand_path(File.dirname(File.dirname(__FILE__)), 'config-local.yml')
-  CONFIG = YAML.load_file(File.expand_path(File.dirname(File.dirname(__FILE__)), 'config-local.yml'))
+if File.exist? File.expand_path("~/.trello2wr/config.yml")
+  CONFIG = YAML.load_file(File.expand_path("~/.trello2wr/config.yml"))
 else
-  CONFIG = YAML.load_file(File.expand_path(File.dirname(File.dirname(__FILE__)), 'config'))
+  raise "ERROR: Config file not found!"
 end
 
-class Workreport
+class Trello2WR
   attr_reader :user, :year, :week
 
   @@debug = false
@@ -100,7 +96,3 @@ class Workreport
     puts message if @@debug
   end
 end
-
-
-ao = Workreport.new
-ao.export
