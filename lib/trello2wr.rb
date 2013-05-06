@@ -11,6 +11,9 @@ end
 class Trello2WR
   attr_reader :user, :year, :week
 
+  STATES = {"complete" => "DONE", "incomplete" => "WIP"}
+  LISTS = ["Done", "Doing", "To Do"]
+
   @@debug = false
 
   def initialize
@@ -48,10 +51,21 @@ class Trello2WR
 
     if board
       cards = board.cards.select{|c| c.member_ids.include? self.user.id}
-      return cards.map{|c| "- #{c.name.downcase} (##{c.short_id}) #{'[WIP]' if name == 'Doing' }\n"}
+      return cards
     else
       raise "ERROR: Board '#{name}' not found!"
     end
+  end
+
+  def checklists(card)
+    string = ''
+
+    card.checklists.map do |checklist|
+      string += "\n    #{checklist.name}:\n"
+      string += checklist.check_items.each_with_index.map{|item, i| "    [#{i+1}] #{item['name']} [#{STATES[item['state']]}]"}.join("\n")
+    end
+
+    string
   end
 
   # Prepare A&O mail
@@ -61,11 +75,14 @@ class Trello2WR
 
   def body
     body = "Accomplishments:\n"
-    self.cards("Done").each{|line| body += line}
 
-    body += "\nObjectives:\n"
-    self.cards("Doing").each{|line| body += line}
-    self.cards("To Do").each{|line| body += line}
+    LISTS.each do |list_name|
+      self.cards(list_name).each do |card|
+        body += "- #{card.name} (##{card.short_id}) #{'[WIP]' if list_name == 'Doing' }\n"
+      end
+
+      body += "\nObjectives:\n" if list_name == "Done"
+    end
 
     body += "\n\nNOTE: (#<number>) are Trello board card IDs"
     self.escape(body)
@@ -85,10 +102,8 @@ class Trello2WR
 
   def export
     mailto = self.construct_mail_to_url(CONFIG['email']['recipient'], self.subject, self.body)
-
     self.log("*** Format email and open email client")
 
-    # FIXME: add support for another email clients
     system("#{CONFIG['email']['client']} #{mailto}")
   end
 
