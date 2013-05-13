@@ -9,30 +9,33 @@ else
 end
 
 class Trello2WR
-  attr_reader :user, :year, :week
+  attr_reader :user, :board, :year, :week
 
   STATES = {"complete" => "DONE", "incomplete" => "WIP"}
   LISTS = ["Done", "Doing", "To Do"]
 
-  @@debug = false
+  @@debug = true
 
   def initialize
     @year = Date.today.year
     @week = Date.today.cweek
     @user = sign_in
+
+    #FIXME: allow more than one board
+    @board = self.user.boards.find{|b| b.name == "Happy Customer"}
   end
 
   # Get Trello cards
   # TODO: find by trello username or email
   def sign_in
-    self.log("*** Trello API basic authorization")
+    self.log("*** Connecting to Trello Public API")
 
     Trello.configure do |config|
       config.developer_public_key = CONFIG['trello']['developer_public_key']
       config.member_token = CONFIG['trello']['member_token']
     end
 
-    self.log("*** Find user: #{CONFIG['trello']['username']}")
+    self.log("*** Searching for user '#{CONFIG['trello']['username']}'")
 
     begin
       return Trello::Member.find(CONFIG['trello']['username'])
@@ -41,16 +44,13 @@ class Trello2WR
     end
   end
 
-  def cards(name)
-    name = "Done (#{self.year}##{self.week-1})" if name == "Done"
-
-    self.log("*** Get '#{name}' cards")
-
-    #FIXME: allow more than one board
-    board = self.user.boards.first.lists.find{|l| l.name == name}
+  def cards(board, list_name)
+    list_name = "Done (#{self.year}##{self.week-1})" if list_name == "Done"
+    self.log("*** Getting cards for '#{list_name}' list")
 
     if board
-      cards = board.cards.select{|c| c.member_ids.include? self.user.id}
+      list = board.lists.find{|l| l.name == list_name}
+      cards = list.cards.select{|c| c.member_ids.include? self.user.id}
       return cards
     else
       raise "ERROR: Board '#{name}' not found!"
@@ -77,7 +77,7 @@ class Trello2WR
     body = "Accomplishments:\n"
 
     LISTS.each do |list_name|
-      self.cards(list_name).each do |card|
+      self.cards(self.board, list_name).each do |card|
         body += "- #{card.name} (##{card.short_id}) #{'[WIP]' if list_name == 'Doing' }\n"
       end
 
@@ -102,9 +102,11 @@ class Trello2WR
 
   def export
     mailto = self.construct_mail_to_url(CONFIG['email']['recipient'], self.subject, self.body)
-    self.log("*** Format email and open email client")
+    self.log("*** Preparing email, please wait ...")
 
     system("#{CONFIG['email']['client']} #{mailto}")
+
+    self.log("*** DONE")
   end
 
   def log(message)
