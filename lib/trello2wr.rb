@@ -9,6 +9,9 @@ else
 end
 
 class Trello2WR
+  include Trello
+  include Trello::Authorization
+
   attr_reader :user, :board, :year, :week
 
   STATES = {"complete" => "DONE", "incomplete" => "WIP"}
@@ -17,35 +20,35 @@ class Trello2WR
   @@debug = true
 
   def initialize
-    @year = Date.today.year
-    @week = Date.today.cweek
-    @user = sign_in
 
-    #FIXME: allow more than one board
-    @board = self.user.boards.find{|b| b.name == "Happy Customer"}
-  end
+    Trello::Authorization.const_set :AuthPolicy, OAuthPolicy
 
-  # Get Trello cards
-  # TODO: find by trello username or email
-  def sign_in
-    self.log("*** Connecting to Trello Public API")
+    # Read keys from ~/trello2wr/config.yml
+    key = CONFIG['trello']['developer_public_key']
+    secret = CONFIG['trello']['developer_secret']
+    token = CONFIG['trello']['member_token']
 
-    Trello.configure do |config|
-      config.developer_public_key = CONFIG['trello']['developer_public_key']
-      config.member_token = CONFIG['trello']['member_token']
-    end
+    OAuthPolicy.consumer_credential = OAuthCredential.new key, secret
+    OAuthPolicy.token = OAuthCredential.new token, nil
 
     self.log("*** Searching for user '#{CONFIG['trello']['username']}'")
 
     begin
-      return Trello::Member.find(CONFIG['trello']['username'])
+      @user = Member.find(CONFIG['trello']['username'])
     rescue Trello::Error
-      raise "ERROR: user '#{CONFIG['default']['username']}' not found!}"
+      raise "ERROR: user '#{CONFIG['trello']['username']}' not found!}"
     end
+
+    @year = Date.today.year
+    @week = Date.today.cweek
+
+    #FIXME: allow more than one board
+    self.log("*** Getting lists for '#{CONFIG['trello']['boards'].first}' board")
+    @board = @user.boards.find{|b| b.name == CONFIG['trello']['boards'].first}
   end
 
   def cards(board, list_name)
-    list_name = "Done (#{self.year}##{self.week-1})" if list_name == "Done"
+    list_name = "Done(#{self.year}##{self.week-1})" if list_name == "Done"
     self.log("*** Getting cards for '#{list_name}' list")
 
     if board
@@ -53,7 +56,7 @@ class Trello2WR
       cards = list.cards.select{|c| c.member_ids.include? self.user.id}
       return cards
     else
-      raise "ERROR: Board '#{name}' not found!"
+      raise "ERROR: Board '#{list_name}' not found!"
     end
   end
 
@@ -89,10 +92,10 @@ class Trello2WR
   end
 
   def construct_mail_to_url(recipient, subject, body)
-    if CONFIG['email']['cc'].empty?
-      URI::MailTo.build({:to => recipient, :headers => {"subject" => subject, "body" => body}}).to_s.inspect
-    else
+    if CONFIG['email'].has_key?('cc') && CONFIG['email']['cc'].present?
       URI::MailTo.build({:to => recipient, :headers => {"cc" => CONFIG['email']['cc'], "subject" => subject, "body" => body}}).to_s.inspect
+    else
+      URI::MailTo.build({:to => recipient, :headers => {"subject" => subject, "body" => body}}).to_s.inspect
     end
   end
 
