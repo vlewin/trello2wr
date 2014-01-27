@@ -80,8 +80,6 @@ class Trello2WR
       self.cards(self.board, list_name).each do |card|
         if list_name.downcase.include? 'doing'
           body += "- #{card.name} (##{card.short_id}) [WIP]\n"
-        elsif list_name.downcase.include? 'review'
-          body += "- #{card.name} (##{card.short_id}) [REVIEW]\n"
         else
           body += "- #{card.name} (##{card.short_id})\n"
         end
