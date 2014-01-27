@@ -13,14 +13,9 @@ class Trello2WR
   include Trello::Authorization
 
   attr_reader :user, :board, :year, :week
-
-  STATES = {"complete" => "DONE", "incomplete" => "WIP"}
-  LISTS = ["Done", "Doing", "To Do"]
-
   @@debug = true
 
   def initialize
-
     Trello::Authorization.const_set :AuthPolicy, OAuthPolicy
 
     # Read keys from ~/trello2wr/config.yml
@@ -42,49 +37,55 @@ class Trello2WR
     @year = Date.today.year
     @week = Date.today.cweek
 
-    #FIXME: allow more than one board
-    self.log("*** Getting lists for '#{CONFIG['trello']['boards'].first}' board")
+    # FIXME: Allow more than one board
+    # self.log("*** Getting lists for '#{CONFIG['trello']['boards'].first}' board")
     @board = @user.boards.find{|b| b.name == CONFIG['trello']['boards'].first}
   end
 
   def cards(board, list_name)
-    list_name = "Done(#{self.year}##{self.week-1})" if list_name == "Done"
     self.log("*** Getting cards for '#{list_name}' list")
 
     if board
-      list = board.lists.find{|l| l.name == list_name}
+      if list_name == 'Done'
+        list = board.lists.select{|l| l.name.include?('Done') && l.name.include?((self.week-1).to_s) }.first
+      else
+        list = board.lists.find{|l| l.name == list_name}
+      end
+
       cards = list.cards.select{|c| c.member_ids.include? self.user.id}
+
       return cards
     else
       raise "ERROR: Board '#{list_name}' not found!"
     end
   end
 
-  def checklists(card)
-    string = ''
-
-    card.checklists.map do |checklist|
-      string += "\n    #{checklist.name}:\n"
-      string += checklist.check_items.each_with_index.map{|item, i| "    [#{i+1}] #{item['name']} [#{STATES[item['state']]}]"}.join("\n")
-    end
-
-    string
-  end
-
-  # Prepare A&O mail
+  # Prepare mail header
   def subject
     self.escape("A&O Week ##{self.week} #{self.user.username}")
   end
 
+  # Prepare mail body
   def body
-    body = "Accomplishments:\n"
-
-    LISTS.each do |list_name|
-      self.cards(self.board, list_name).each do |card|
-        body += "- #{card.name} (##{card.short_id}) #{'[WIP]' if list_name == 'Doing' }\n"
+    body = ''
+    ['Done', 'In review', 'To Do', 'Doing'].each do |list_name|
+      if list_name.downcase.include? 'done'
+        body += "Accomplishments:\n"
+      elsif list_name.downcase.include? 'review'
+        body += "\nIn review:\n"
+      elsif list_name.downcase.include? 'to do'
+        body += "\nObjectives:\n" if list_name.downcase.include? 'to do'
       end
 
-      body += "\nObjectives:\n" if list_name == "Done"
+      self.cards(self.board, list_name).each do |card|
+        if list_name.downcase.include? 'doing'
+          body += "- #{card.name} (##{card.short_id}) [WIP]\n"
+        elsif list_name.downcase.include? 'review'
+          body += "- #{card.name} (##{card.short_id}) [REVIEW]\n"
+        else
+          body += "- #{card.name} (##{card.short_id})\n"
+        end
+      end
     end
 
     body += "\n\nNOTE: (#<number>) are Trello board card IDs"
