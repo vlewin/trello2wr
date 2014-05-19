@@ -47,7 +47,7 @@ class Trello2WR
 
     if board
       if list_name == 'Done'
-        list = board.lists.select{|l| l.name.include?('Done') && l.name.include?((self.week-1).to_s) }.first
+        list = board.lists.select{|l| l.name.include?('Done') && l.name.include?("##{(self.week-1).to_s}") }.last
       else
         list = board.lists.find{|l| l.name == list_name}
       end
