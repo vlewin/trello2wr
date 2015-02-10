@@ -47,14 +47,14 @@ class Trello2WR
 
     if board
       if list_name == 'Done'
-        list = board.lists.select{|l| l.name.include?('Done') && l.name.include?("##{(self.week-1).to_s}") }.last
+        previous_week = (self.week-1)
+        done_lists = board.lists.select{|l| l.name.include?('Done')}
+        latest_list = done_lists.sort_by(&:name).last
+        latest_list.cards.select{|c| c.last_activity_date.to_datetime.cweek == previous_week && c.member_ids.include?(user.id) }
       else
         list = board.lists.find{|l| l.name == list_name}
+        list.cards.select{|c| c.member_ids.include? self.user.id}
       end
-
-      cards = list.cards.select{|c| c.member_ids.include? self.user.id}
-
-      return cards
     else
       raise "ERROR: Board '#{list_name}' not found!"
     end

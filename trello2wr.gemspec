@@ -1,6 +1,6 @@
 Gem::Specification.new do |s|
   s.name        = 'trello2wr'
-  s.version     = '1.0.4'
+  s.version     = '1.0.5'
   s.date        = Time.now.strftime('%F')
   s.summary     = "A&O from Trello"
   s.description = "Generates weekly work report (A&O) from Trello board"
