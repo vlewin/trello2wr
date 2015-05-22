@@ -2,58 +2,71 @@ require 'trello'
 require 'yaml'
 require 'uri'
 
-if File.exist? File.expand_path("~/.trello2wr/config.yml")
-  CONFIG = YAML.load_file(File.expand_path("~/.trello2wr/config.yml"))
-else
-  raise "ERROR: Config file not found!"
-end
-
 class Trello2WR
   include Trello
   include Trello::Authorization
 
-  attr_reader :user, :board, :year, :week
+  attr_reader :user, :board, :week
   @@debug = true
 
-  def initialize
+  def initialize(sprint=nil, week)
+    @config = load_config
+
+    authenticate
+
+    @sprint = sprint
+    @week = week
+
+    @username = @config['trello']['username']
+    @user = find_member(@username)
+    @board = find_board
+  end
+
+  def authenticate
     Trello::Authorization.const_set :AuthPolicy, OAuthPolicy
+    OAuthPolicy.consumer_credential = OAuthCredential.new @config['trello']['developer_public_key'], @config['trello']['developer_secret']
+    OAuthPolicy.token = OAuthCredential.new @config['trello']['member_token'], nil
+  end
 
+  def load_config
     # Read keys from ~/trello2wr/config.yml
-    key = CONFIG['trello']['developer_public_key']
-    secret = CONFIG['trello']['developer_secret']
-    token = CONFIG['trello']['member_token']
+    if File.exist? File.expand_path("~/.trello2wr/config.yml")
+      YAML.load_file(File.expand_path("~/.trello2wr/config.yml"))
+    else
+      raise "ERROR: Config file not found!"
+    end
+  end
 
-    OAuthPolicy.consumer_credential = OAuthCredential.new key, secret
-    OAuthPolicy.token = OAuthCredential.new token, nil
-
-    self.log("*** Searching for user '#{CONFIG['trello']['username']}'")
+  def find_member(username)
+    self.log("*** Searching for user '#{username}'")
 
     begin
-      @user = Member.find(CONFIG['trello']['username'])
+      Member.find(username)
     rescue Trello::Error
-      raise "ERROR: user '#{CONFIG['trello']['username']}' not found!}"
+      raise "ERROR: user '#{username}' not found!}"
     end
+  end
 
-    @year = Date.today.year
-    @week = Date.today.cweek
-
-    # FIXME: Allow more than one board
-    # self.log("*** Getting lists for '#{CONFIG['trello']['boards'].first}' board")
-    @board = @user.boards.find{|b| b.name == CONFIG['trello']['boards'].first}
+  def find_board
+    board = @config['trello']['boards'].first
+    self.log("*** Getting lists for '#{board}' board")
+    @user.boards.find{|b| b.name == board}
   end
 
   def cards(board, list_name)
     self.log("*** Getting cards for '#{list_name}' list")
 
     if board
+      lists = board.lists
+
       if list_name == 'Done'
-        previous_week = (self.week-1)
-        done_lists = board.lists.select{|l| l.name.include?('Done')}
-        latest_list = done_lists.sort_by(&:name).last
-        latest_list.cards.select{|c| c.last_activity_date.to_datetime.cweek == previous_week && c.member_ids.include?(user.id) }
+        lists = lists.select{|l| l.name.include?('Done')}
+        list = @sprint ? lists.select{|l| l.name.include?(@sprint.to_s) }.first : lists.sort_by{|l| l.id }.last
+
+        self.log("*** Getting cards for '#{list.name}' list (week #{@week})")
+        list.cards.select{|c| c.last_activity_date.to_datetime.cweek == @week && c.member_ids.include?(user.id) }
       else
-        list = board.lists.find{|l| l.name == list_name}
-        list.cards.select{|c| c.member_ids.include? self.user.id}
+        lists.find{|l| l.name == list_name}.cards.select{|c| c.member_ids.include? self.user.id}
       end
     else
       raise "ERROR: Board '#{list_name}' not found!"
@@ -74,10 +87,10 @@ class Trello2WR
       elsif list_name.downcase.include? 'review'
         body += "\nIn review:\n"
       elsif list_name.downcase.include? 'to do'
-        body += "\nObjectives:\n" if list_name.downcase.include? 'to do'
+        body += "\nObjectives:\n"
       end
 
-      self.cards(self.board, list_name).each do |card|
+      self.cards(board, list_name).each do |card|
         if list_name.downcase.include? 'doing'
           body += "- #{card.name} (##{card.short_id}) [WIP]\n"
         else
@@ -87,15 +100,15 @@ class Trello2WR
     end
 
     body += "\n\nNOTE: (#<number>) are Trello board card IDs"
-    self.escape(body)
+
+    escape(body)
   end
 
   def construct_mail_to_url(recipient, subject, body)
-    if CONFIG['email'].has_key?('cc') && CONFIG['email']['cc'].present?
-      URI::MailTo.build({:to => recipient, :headers => {"cc" => CONFIG['email']['cc'], "subject" => subject, "body" => body}}).to_s.inspect
-    else
-      URI::MailTo.build({:to => recipient, :headers => {"subject" => subject, "body" => body}}).to_s.inspect
-    end
+    headers = { subject: subject, body: body }
+    headers[:cc] = @config['email']['cc'] if @config['email'].has_key?('cc') && @config['email']['cc'].present?
+
+    URI::MailTo.build({:to => recipient, :headers => headers.stringify_keys}).to_s.inspect
   end
 
   def escape(string)
@@ -103,10 +116,10 @@ class Trello2WR
   end
 
   def export
-    mailto = self.construct_mail_to_url(CONFIG['email']['recipient'], self.subject, self.body)
+    mailto = self.construct_mail_to_url(@config['email']['recipient'], subject, body)
     self.log("*** Preparing email, please wait ...")
 
-    system("#{CONFIG['email']['client']} #{mailto}")
+    system("#{@config['email']['client']} #{mailto}")
 
     self.log("*** DONE")
   end
